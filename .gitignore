@@ -1,0 +1,7 @@
+# Environment where credentials are stored
+.env
+# Outputs
+*.log
+*.csv
+# macOS stuff
+.DS_Store
