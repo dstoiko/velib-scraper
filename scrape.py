@@ -1,11 +1,18 @@
 import os
+import sys
 import time
 import re
 import csv
 from selenium import webdriver
-from lxml import html
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from tabulate import tabulate
 from dotenv import load_dotenv
+
+# Timeout for loading additional components on page
+WEBDRIVER_WAIT_TIMEOUT_S = 10
+PAGE_LOAD_TIMEOUT_S = 5
 
 
 def login(driver, username, password):
@@ -19,14 +26,16 @@ def login(driver, username, password):
     p.submit()
 
 
-def get_runs(runs_list):
+def get_runs(driver, runs_list):
     '''
     Get runs list well formatted
     '''
-    # runs_list = runs_html.cssselect(
-    #     "body > app-account > div > app-my-runs > div > div > div:nth-child(2) > div:nth-child(2) > div > div.container.runs")
-    page_runs_list = driver.find_elements_by_css_selector(
-        "body > app-account > div > app-my-runs > div > div > div:nth-child(2) > div:nth-child(2) > div > div.container.runs")
+    # Leave time for JS to generate additional elements (webdriver not enough)
+    time.sleep(1)
+    page_runs_list = WebDriverWait(driver, WEBDRIVER_WAIT_TIMEOUT_S).until(
+        EC.presence_of_all_elements_located(
+            (By.CSS_SELECTOR, "body > app-account > div > app-my-runs > div > div > div:nth-child(2) > div:nth-child(2) > div > div.container.runs"))
+    )
     for run in page_runs_list:
         date = run.find_element_by_css_selector("div.operation-date").text
         distance = run.find_element_by_css_selector(
@@ -45,6 +54,16 @@ def get_runs(runs_list):
                 int(duration_digits.group(2))
         runs_list.append([date, distance, duration])
     return runs_list
+
+
+def get_pagination_links(driver):
+    '''
+    Get a list of pagination links from the page
+    '''
+    return WebDriverWait(driver, WEBDRIVER_WAIT_TIMEOUT_S).until(
+        EC.presence_of_all_elements_located(
+            (By.CSS_SELECTOR, "ul.pagination > li > a"))
+    )
 
 
 def get_max_page_number(pagination_links):
@@ -75,7 +94,11 @@ def format_runs_csv(runs_list, headers):
 
 
 if __name__ == "__main__":
+    # Initialize driver
     driver = webdriver.Chrome()
+    # Wait to load additional generated elements
+    driver.implicitly_wait(WEBDRIVER_WAIT_TIMEOUT_S)
+    driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT_S)
     driver.get("https://www.velib-metropole.fr/login")
 
     # Log-in
@@ -85,26 +108,20 @@ if __name__ == "__main__":
 
     # Go to page for my runs
     driver.get("https://www.velib-metropole.fr/private/account#/my-runs")
-    # Leave some time for JS to generate the HTML elements we need
-    time.sleep(3)
-    driver.get("https://www.velib-metropole.fr/private/account#/my-runs")
     runs_list = []
 
     # Get pagination links
-    pagination_links = driver.find_elements_by_css_selector(
-        "ul.pagination > li > a")
+    pagination_links = get_pagination_links(driver)
     max_page_number = get_max_page_number(pagination_links)
+    print("Will process {0} pages".format(max_page_number))
 
     # Always click on the "next" pagination link until exhausting the pages to scrape
     for i in range(max_page_number):
-        pagination_links = driver.find_elements_by_css_selector(
-            "ul.pagination > li > a")
-        runs_list = get_runs(runs_list)
+        pagination_links = get_pagination_links(driver)
+        runs_list = get_runs(driver, runs_list)
         print("Got page {0} runs".format(i + 1))
-        # time.sleep(1)
         if i < max_page_number - 1:
             pagination_links[len(pagination_links) - 2].click()
-            time.sleep(2)  # leave time for JS to re-generate HTML
 
     # Write results in a pretty table
     headers = ["date", "distance", "duration"]
