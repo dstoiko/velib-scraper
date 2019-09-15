@@ -38,6 +38,9 @@ def get_runs(driver, runs_list):
     )
     for run in page_runs_list:
         date = run.find_element_by_css_selector("div.operation-date").text
+        bike_type = run.find_element_by_css_selector(
+            "div.row.align-items-center > div:nth-child(1) > div > div > img").get_attribute("class")
+        bike_type = 'electric' if bike_type == 'velo_elec_bleu' else 'mechanical'
         distance = run.find_element_by_css_selector(
             "div.row.align-items-center > div:nth-child(2) > div > div").text
         distance = float(
@@ -52,7 +55,7 @@ def get_runs(driver, runs_list):
         else:
             duration = int(duration_digits.group(1)) * 60 + \
                 int(duration_digits.group(2))
-        runs_list.append([date, distance, duration])
+        runs_list.append([date, bike_type, distance, duration])
     return runs_list
 
 
